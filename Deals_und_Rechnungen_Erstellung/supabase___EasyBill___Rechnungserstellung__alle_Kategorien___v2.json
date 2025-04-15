@@ -227,8 +227,214 @@
     },
     {
       "parameters": {
-        "jsCode": "/**\n * n8n Function Node\n */\n\nconst apiKey = '7zDToaoQlotLDQHnQwUKgBKOEIljhEvbmRkJ5TgBIIVaqo02pXlTz6yJFyOcihGB';\nconst baseUrl = 'https://api.easybill.de/rest/v1';\n\n/** \n * Hilfsfunktion: GET \n */\nasync function httpGet(thisContext, endpoint, qs = {}) {\n  const options = {\n    method: 'GET',\n    url: `${baseUrl}${endpoint}`,\n    headers: {\n      Authorization: `Bearer ${apiKey}`,\n      'Content-Type': 'application/json',\n    },\n    qs,\n    json: true,\n  };\n  return thisContext.helpers.httpRequest(options);\n}\n\n/** \n * Hilfsfunktion: POST \n */\nasync function httpPost(thisContext, endpoint, body = {}) {\n  const options = {\n    method: 'POST',\n    url: `${baseUrl}${endpoint}`,\n    headers: {\n      Authorization: `Bearer ${apiKey}`,\n      'Content-Type': 'application/json',\n    },\n    body,\n    json: true,\n  };\n  return thisContext.helpers.httpRequest(options);\n}\n\n/** \n * Hilfsfunktion: PUT \n */\nasync function httpPut(thisContext, endpoint, body = undefined) {\n  const options = {\n    method: 'PUT',\n    url: `${baseUrl}${endpoint}`,\n    headers: {\n      Authorization: `Bearer ${apiKey}`,\n      'Content-Type': 'application/json',\n    },\n    json: true,\n  };\n  if (body !== undefined) {\n    options.body = body;\n  }\n  return thisContext.helpers.httpRequest(options);\n}\n\n/**\n * Kunde in Easybill per E-Mail suchen\n */\nasync function getCustomerByEmail(thisContext, email) {\n  const data = await httpGet(thisContext, '/customers', { emails: email });\n  if (data && data.items && data.items.length > 0) {\n    return data.items[0];\n  }\n  return null;\n}\n\n/**\n * Produkt (Position) in Easybill per Nummer/Name suchen\n */\nasync function getProductByName(thisContext, productName) {\n  const data = await httpGet(thisContext, '/positions', { number: productName });\n  if (data && data.items && data.items.length > 0) {\n    return data.items[0];\n  }\n  return null;\n}\n\n/** \n * Rechnung erstellen (POST /documents)\n */\nasync function createInvoice(thisContext, invoicePayload) {\n  return httpPost(thisContext, '/documents', invoicePayload);\n}\n\n/** \n * Rechnung finalisieren\n */\nasync function finalizeDocument(thisContext, documentId) {\n  return httpPut(thisContext, `/documents/${documentId}/done`);\n}\n\n/**\n * Hauptfunktion: Liest dein JSON aus und erzeugt + finalisiert die Rechnung.\n */\nasync function execute() {\n  const items = $input.all(); // Alle eingehenden Items (z. B. 1 Item)\n  const returnData = [];\n\n  for (let i = 0; i < items.length; i++) {\n    try {\n      // JSON-Daten vom aktuellen Item\n      const data = items[i].json;\n\n      // ---------------------------------------\n      // 1) Felder aus deinem JSON entnehmen\n      // ---------------------------------------\n      const {\n        hubspot_kunden_id,\n        vorname_kunde,\n        nachname_kunde,\n        strasse_hausnummer_kunde,\n        plz_kunde,\n        stadt_kunde,\n        land,\n        unternehmen,\n        email,\n        easybill_kunden_id,\n        rate,\n        rechnungsdatum,\n        rechnungsbetrag,\n        rechnung_datenbank_id,\n        name,\n        firma,\n        produkt_typ,\n        beschreibung\n      } = data;\n\n      // Datum und Fälligkeit in YYYY-MM-DD umwandeln\n      const invoiceDate = rechnungsdatum ? rechnungsdatum.slice(0, 10) : null; \n\n      // Wir wollen am Ende \"dealId_rechnungsnummer\" ausgeben\n      const dealidRechnungsnummer = `${rechnung_datenbank_id}`;\n\n      // ---------------------------------------\n      // 2) Kunde in Easybill suchen\n      // ---------------------------------------\n      const foundCustomer = await getCustomerByEmail(this, email);\n      if (!foundCustomer) {\n        throw new Error(`Kunde mit E-Mail \"${email}\" nicht in Easybill gefunden.`);\n      }\n\n      // ---------------------------------------\n      // 3) Produkt in Easybill suchen\n      // ---------------------------------------\n      const foundProduct = await getProductByName(this, name);\n      if (!foundProduct) {\n        throw new Error(`Produkt \"${name}\" nicht in Easybill gefunden (Artikelnummer).`);\n      }\n\n      // ---------------------------------------\n      // 4) Rechnung erstellen (POST /documents)\n      // ---------------------------------------\n      const docPayload = {\n        document_type: 'INVOICE',        // Rechnung\n        customer_id: foundCustomer.id,   // ID des gefundenen Kunden\n        document_date: invoiceDate,      // \"2025-04-07\"\n        due_date: invoiceDate,           // Fälligkeitsdatum (kann angepasst werden)\n        currency: 'EUR',\n        items: [\n          {\n            type: 'POSITION', \n            position_id: foundProduct.id, \n            quantity: rate, \n            single_price_gross: betrag || 0,\n            vat_percent: 0, // ggf. anpassen\n          },\n        ],\n      };\n\n      // Rechnung erzeugen\n      const createdDocument = await createInvoice(this, docPayload);\n\n      // ---------------------------------------\n      // 5) Rechnung finalisieren (PUT /documents/:id/done)\n      // ---------------------------------------\n      const finalizedDocument = await finalizeDocument(this, createdDocument.id);\n\n      // ---------------------------------------\n      // 6) Ergebnis zurückgeben (inkl. Dokumenten-ID und Rechnungsnummer)\n      // ---------------------------------------\n      returnData.push({\n        json: {\n          success: true,\n          message: 'Rechnung erfolgreich erstellt und finalisiert.',\n          documentId: createdDocument.id,\n          invoiceNumber: finalizedDocument.number,\n          dealid_rechnungsnummer: dealidRechnungsnummer,\n        },\n      });\n\n    } catch (error) {\n      returnData.push({ json: { success: false, error: error.message } });\n    }\n  }\n\n  return returnData;\n}\n\nreturn execute();\n"
+        "jsCode": 
+        /**
+ * n8n Function Node
+ */
+
+const apiKey = '7zDToaoQlotLDQHnQwUKgBKOEIljhEvbmRkJ5TgBIIVaqo02pXlTz6yJFyOcihGB';
+const baseUrl = 'https://api.easybill.de/rest/v1';
+
+/** 
+ * Hilfsfunktion: GET 
+ */
+async function httpGet(thisContext, endpoint, qs = {}) {
+  const options = {
+    method: 'GET',
+    url: `${baseUrl}${endpoint}`,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    qs,
+    json: true,
+  };
+  return thisContext.helpers.httpRequest(options);
+}
+
+/** 
+ * Hilfsfunktion: POST 
+ */
+async function httpPost(thisContext, endpoint, body = {}) {
+  const options = {
+    method: 'POST',
+    url: `${baseUrl}${endpoint}`,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body,
+    json: true,
+  };
+  return thisContext.helpers.httpRequest(options);
+}
+
+/** 
+ * Hilfsfunktion: PUT 
+ */
+async function httpPut(thisContext, endpoint, body = undefined) {
+  const options = {
+    method: 'PUT',
+    url: `${baseUrl}${endpoint}`,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    json: true,
+  };
+  if (body !== undefined) {
+    options.body = body;
+  }
+  return thisContext.helpers.httpRequest(options);
+}
+
+/**
+ * Kunde in Easybill per E-Mail suchen
+ */
+async function getCustomerByEmail(thisContext, email) {
+  const data = await httpGet(thisContext, '/customers', { emails: email });
+  if (data && data.items && data.items.length > 0) {
+    return data.items[0];
+  }
+  return null;
+}
+
+/**
+ * Produkt (Position) in Easybill per Nummer/Name suchen
+ */
+async function getProductByName(thisContext, productName) {
+  const data = await httpGet(thisContext, '/positions', { number: productName });
+  if (data && data.items && data.items.length > 0) {
+    return data.items[0];
+  }
+  return null;
+}
+
+/** 
+ * Rechnung erstellen (POST /documents)
+ */
+async function createInvoice(thisContext, invoicePayload) {
+  return httpPost(thisContext, '/documents', invoicePayload);
+}
+
+/** 
+ * Rechnung finalisieren
+ */
+async function finalizeDocument(thisContext, documentId) {
+  return httpPut(thisContext, `/documents/${documentId}/done`);
+}
+
+/**
+ * Hauptfunktion: Liest dein JSON aus und erzeugt + finalisiert die Rechnung.
+ */
+async function execute() {
+  const items = $input.all(); // Alle eingehenden Items (z. B. 1 Item)
+  const returnData = [];
+
+  for (let i = 0; i < items.length; i++) {
+    try {
+      // JSON-Daten vom aktuellen Item
+      const data = items[i].json;
+
+      // ---------------------------------------
+      // 1) Felder aus deinem JSON entnehmen
+      // ---------------------------------------
+      const {
+        hubspot_kunden_id,
+        vorname_kunde,
+        nachname_kunde,
+        strasse_hausnummer_kunde,
+        plz_kunde,
+        stadt_kunde,
+        land,
+        unternehmen,
+        email,
+        easybill_kunden_id,
+        rate,
+        rechnungsdatum,
+        rechnungsbetrag,
+        rechnung_datenbank_id,
+        name,
+        firma,
+        produkt_typ,
+        beschreibung
+      } = data;
+
+      // Datum und Fälligkeit in YYYY-MM-DD umwandeln
+      const invoiceDate = rechnungsdatum ? rechnungsdatum.slice(0, 10) : null; 
+
+      // Wir wollen am Ende "dealId_rechnungsnummer" ausgeben
+      const dealidRechnungsnummer = `${rechnung_datenbank_id}`;
+
+      // ---------------------------------------
+      // 2) Kunde in Easybill suchen
+      // ---------------------------------------
+      const foundCustomer = await getCustomerByEmail(this, email);
+      if (!foundCustomer) {
+        throw new Error(`Kunde mit E-Mail "${email}" nicht in Easybill gefunden.`);
+      }
+
+      // ---------------------------------------
+      // 3) Produkt in Easybill suchen
+      // ---------------------------------------
+      const foundProduct = await getProductByName(this, name);
+      if (!foundProduct) {
+        throw new Error(`Produkt "${name}" nicht in Easybill gefunden (Artikelnummer).`);
+      }
+
+      // ---------------------------------------
+      // 4) Rechnung erstellen (POST /documents)
+      // ---------------------------------------
+      const docPayload = {
+        document_type: 'INVOICE',        // Rechnung
+        customer_id: foundCustomer.id,   // ID des gefundenen Kunden
+        document_date: invoiceDate,      // "2025-04-07"
+        due_date: invoiceDate,           // Fälligkeitsdatum (kann angepasst werden)
+        currency: 'EUR',
+        items: [
+          {
+            type: 'POSITION', 
+            position_id: foundProduct.id, 
+            quantity: rate, 
+            single_price_gross: betrag || 0,
+            vat_percent: 0, // ggf. anpassen
+          },
+        ],
+      };
+
+      // Rechnung erzeugen
+      const createdDocument = await createInvoice(this, docPayload);
+
+      // ---------------------------------------
+      // 5) Rechnung finalisieren (PUT /documents/:id/done)
+      // ---------------------------------------
+      const finalizedDocument = await finalizeDocument(this, createdDocument.id);
+
+      // ---------------------------------------
+      // 6) Ergebnis zurückgeben (inkl. Dokumenten-ID und Rechnungsnummer)
+      // ---------------------------------------
+      returnData.push({
+        json: {
+          success: true,
+          message: 'Rechnung erfolgreich erstellt und finalisiert.',
+          documentId: createdDocument.id,
+          invoiceNumber: finalizedDocument.number,
+          dealid_rechnungsnummer: dealidRechnungsnummer,
+        },
+      });
+
+    } catch (error) {
+      returnData.push({ json: { success: false, error: error.message } });
+    }
+  }
+
+  return returnData;
+}
+
+return execute();
+
       },
+
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -365,3 +571,102 @@
     }
   ]
 }
+
+
+
+// -----------------------------------------------------------------------------------------------------
+
+
+
+
+***
+\\ Kommentare und Erklärung zu jedem Node:
+// n8n Workflow: supabase - EasyBill - Rechnungserstellung (alle Kategorien)
+// -----------------------------------------------------------------------------
+// Automatisierte Rechnungserstellung über EasyBill mit Kategoriefiltern & Supabase-Datenbank
+
+/**
+ * Zeitlicher Auslöser: Alle 30 Minuten
+ * → startet den Prozess zyklisch
+ */
+{
+  node: 'Schedule Trigger',
+  action: 'Startet den Workflow alle 30 Minuten'
+}
+
+/**
+ * Datum vorbereiten für die Rechnungsfilterung
+ * → wandelt Zeitstempel in YYYY-MM-DD Format
+ */
+{
+  node: 'Date & Time',
+  action: 'Konvertiere Zeitstempel für Abfrage nach Rechnungen'
+}
+
+/**
+ * Supabase: Filtert alle Rechnungen mit Status "DB_erstellt" zum heutigen Tag
+ */
+{
+  node: 'get Rechnung',
+  action: 'Abfrage in "rechnungen"-Tabelle mit Statusfilter'
+}
+
+/**
+ * Supabase: Holt Kundendaten anhand der Hubspot-ID
+ */
+{
+  node: 'get Kunden',
+  action: 'Verknüpft Rechnung mit Kundenprofil aus "kunde"-Tabelle'
+}
+
+/**
+ * Supabase: Holt zugehörigen Deal inkl. Produkt-Zuordnung
+ */
+{
+  node: 'get Produkt from Deal',
+  action: 'Extrahiert Produkt-ID aus "deals" für spätere Zuordnung'
+}
+
+/**
+ * Supabase: Holt Produktinformationen anhand des Produktnamens
+ */
+{
+  node: 'get Produkt',
+  action: 'Lädt Produktdaten aus "produkte"-Tabelle'
+}
+
+/**
+ * Verknüpft Rechnungen + Kunden + Produktinformationen
+ * via SQL JOIN über Input1–3
+ */
+{
+  node: 'Merge',
+  action: 'SQL-Merge aus Rechnung, Kunde & Produkt via ID-Zuordnung'
+}
+
+/**
+ * Code-Node: Erstellt und finalisiert Rechnung in EasyBill via API
+ * Mandant = Kategorie 1 → API Key A
+ */
+{
+  node: 'Code',
+  action: 'Verarbeitet Rechnung für Kategorie 1'
+}
+
+/**
+ * Supabase: Aktualisiert Rechnungsstatus & IDs nach erfolgreicher Erstellung
+ */
+{
+  node: 'Supabase1',
+  action: 'Speichert EasyBill-ID, Status und Fälligkeitsdatum zurück'
+}
+
+// -----------------------------------------------------------------------------
+// Hinweise:
+// - Kategorie-Zweigfilterung über easybill_kategorie optional, hier entfällt sie
+// - Mandantensteuerung über separaten Workflow oder Parametrisierung möglich
+// - Fehlerhandling integriert (JSON Rückgabe mit success: false)
+// -----------------------------------------------------------------------------
+
+
+***
