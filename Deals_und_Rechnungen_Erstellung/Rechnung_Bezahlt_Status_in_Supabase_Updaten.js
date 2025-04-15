@@ -31,7 +31,109 @@
     },
     {
       "parameters": {
-        "jsCode": "const apiKey = '7zDToaoQlotLDQHnQwUKgBKOEIljhEvbmRkJ5TgBIIVaqo02pXlTz6yJFyOcihGB';\nconst baseUrl = 'https://api.easybill.de/rest/v1';\nconst originalInvoiceNumber = $input.first().json.easybill_rechnung_id ; // <- Gesuchte Rechnungsnummer\n\nasync function httpGet(thisContext, endpoint, qs = {}) {\n  const options = {\n    method: 'GET',\n    url: `${baseUrl}${endpoint}`,\n    headers: {\n      Authorization: `Bearer ${apiKey}`,\n      'Content-Type': 'application/json',\n    },\n    qs,\n    json: true,\n  };\n  return thisContext.helpers.httpRequest(options);\n}\n\nasync function execute() {\n  const returnData = [];\n\n  // 1. Hauptrechnung suchen\n  const result = await httpGet(this, '/documents', {\n    number: originalInvoiceNumber\n  });\n\n  const foundDocs = Array.isArray(result?.items) ? result.items : [];\n\n  for (const doc of foundDocs) {\n    const amount = doc.amount || 0;\n    const paidAmount = doc.paid_amount || 0;\n\n    const dueDateRaw = doc.due_date ? new Date(doc.due_date) : null;\n    const dueInDays = doc.due_in_days || 0;\n    const dueDate = dueDateRaw ? new Date(dueDateRaw.getTime()) : null;\n    if (dueDate) dueDate.setDate(dueDate.getDate() + dueInDays);\n\n    // 2. Alle Dokumente abrufen (optional: Pagination)\n    const allDocsRes = await httpGet(this, '/documents', { limit: 500 });\n    const allDocs = Array.isArray(allDocsRes?.items) ? allDocsRes.items : [];\n\n    // 3. Reminder und Mahnungen, die sich auf genau diese Rechnung beziehen\n    const refDocs = allDocs.filter(ref =>\n      ref.reference_id === doc.id &&\n      ['REMINDER', 'DUNNING'].includes((ref.type || '').toUpperCase())\n    );\n\n    // 4. Maximal je 1 Reminder + 1 Dunning zurückgeben\n    \n\n    // 5. Status bestimmen\n    let statusCode = null;\n    if (amount === 0 || paidAmount === amount) {\n      statusCode = 2; // BEZAHLT\n    } else if (doc.type === 'STORNO' || doc.type === 'STORNO_PROFORMA_INVOICE') {\n      statusCode = 6; // STORNIERT\n    } else if (doc.type === 'DUNNING') {\n      statusCode = 5; // MAHNUNG\n    } else if (doc.type === 'REMINDER') {\n      statusCode = 4; // ERINNERUNG\n    } else if (dueDate && dueDate < new Date()) {\n      statusCode = 3; // ÜBERFÄLLIG\n    } else if (!doc.type) {\n      statusCode = 7; // KEINE REFERENZ\n    } else {\n      statusCode = 1; // FÄLLIG\n    }\n\n    // 6. Ergebnis zusammenbauen\n    returnData.push({\n      json: {\n        document_id: doc.id,\n        number: doc.number,\n        type: doc.type,\n        status: doc.status || doc.state,\n        created_at: doc.created_at,\n        due_date: doc.due_date,\n        due_in_days: dueInDays,\n        amount: amount,\n        paid_amount: paidAmount,\n        reference_number: doc.reference_number,\n        status_code: statusCode,\n  \n        status_description: {\n          1: 'FÄLLIG',\n          2: 'BEZAHLT',\n          3: 'ÜBERFÄLLIG',\n          4: 'ERINNERUNG',\n          5: 'MAHNUNG',\n          6: 'STORNIERT',\n          7: 'KEINE REFERENZ'\n        }[statusCode]\n      }\n    });\n  }\n\n    return returnData;\n}\n\nreturn execute();\n"
+        "jsCode": 
+const apiKey = '7zDToaoQlotLDQHnQwUKgBKOEIljhEvbmRkJ5TgBIIVaqo02pXlTz6yJFyOcihGB';
+const baseUrl = 'https://api.easybill.de/rest/v1';
+const originalInvoiceNumber = $input.first().json.easybill_rechnung_id ; // <- Gesuchte Rechnungsnummer
+
+async function httpGet(thisContext, endpoint, qs = {}) {
+  const options = {
+    method: 'GET',
+    url: `${baseUrl}${endpoint}`,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    qs,
+    json: true,
+  };
+  return thisContext.helpers.httpRequest(options);
+}
+
+async function execute() {
+  const returnData = [];
+
+  // 1. Hauptrechnung suchen
+  const result = await httpGet(this, '/documents', {
+    number: originalInvoiceNumber
+  });
+
+  const foundDocs = Array.isArray(result?.items) ? result.items : [];
+
+  for (const doc of foundDocs) {
+    const amount = doc.amount || 0;
+    const paidAmount = doc.paid_amount || 0;
+
+    const dueDateRaw = doc.due_date ? new Date(doc.due_date) : null;
+    const dueInDays = doc.due_in_days || 0;
+    const dueDate = dueDateRaw ? new Date(dueDateRaw.getTime()) : null;
+    if (dueDate) dueDate.setDate(dueDate.getDate() + dueInDays);
+
+    // 2. Alle Dokumente abrufen (optional: Pagination)
+    const allDocsRes = await httpGet(this, '/documents', { limit: 500 });
+    const allDocs = Array.isArray(allDocsRes?.items) ? allDocsRes.items : [];
+
+    // 3. Reminder und Mahnungen, die sich auf genau diese Rechnung beziehen
+    const refDocs = allDocs.filter(ref =>
+      ref.reference_id === doc.id &&
+      ['REMINDER', 'DUNNING'].includes((ref.type || '').toUpperCase())
+    );
+
+    // 4. Maximal je 1 Reminder + 1 Dunning zurückgeben
+    
+
+    // 5. Status bestimmen
+    let statusCode = null;
+    if (amount === 0 || paidAmount === amount) {
+      statusCode = 2; // BEZAHLT
+    } else if (doc.type === 'STORNO' || doc.type === 'STORNO_PROFORMA_INVOICE') {
+      statusCode = 6; // STORNIERT
+    } else if (doc.type === 'DUNNING') {
+      statusCode = 5; // MAHNUNG
+    } else if (doc.type === 'REMINDER') {
+      statusCode = 4; // ERINNERUNG
+    } else if (dueDate && dueDate < new Date()) {
+      statusCode = 3; // ÜBERFÄLLIG
+    } else if (!doc.type) {
+      statusCode = 7; // KEINE REFERENZ
+    } else {
+      statusCode = 1; // FÄLLIG
+    }
+
+    // 6. Ergebnis zusammenbauen
+    returnData.push({
+      json: {
+        document_id: doc.id,
+        number: doc.number,
+        type: doc.type,
+        status: doc.status || doc.state,
+        created_at: doc.created_at,
+        due_date: doc.due_date,
+        due_in_days: dueInDays,
+        amount: amount,
+        paid_amount: paidAmount,
+        reference_number: doc.reference_number,
+        status_code: statusCode,
+  
+        status_description: {
+          1: 'FÄLLIG',
+          2: 'BEZAHLT',
+          3: 'ÜBERFÄLLIG',
+          4: 'ERINNERUNG',
+          5: 'MAHNUNG',
+          6: 'STORNIERT',
+          7: 'KEINE REFERENZ'
+        }[statusCode]
+      }
+    });
+  }
+
+    return returnData;
+}
+
+return execute();
+
+        
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
