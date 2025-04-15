@@ -1,4 +1,64 @@
+{  
+
+  
+// -----------------------------------------------------------------------------
+
+// n8n Workflow: Rechnung Bezahlt Status in Supabase Updaten, Kommentare und Erklärung zu den Nodes
+// -----------------------------------------------------------------------------
+
+/**
+ * Zeitlicher Auslöser: Alle 10 Minuten
+ * → prüft regelmäßig, ob eine Rechnung bezahlt oder überfällig ist
+ */
 {
+  node: 'Schedule Trigger',
+  action: 'Starte den Workflow alle 10 Minuten'
+}
+
+/**
+ * Formatiert aktuellen Zeitstempel für saubere Datumsvergleiche
+ */
+{
+  node: 'Date & Time',
+  action: 'Konvertiere Timestamp zu YYYY-MM-DD (optional)
+}
+
+/**
+ * Supabase: Lade Rechnung anhand der Easybill-Rechnungsnummer
+ */
+{
+  node: 'Supabase',
+  action: 'Hole Rechnungsdaten (easybill_rechnung_id) aus Supabase-Tabelle'
+}
+
+/**
+ * Code-Node: Holt Dokument aus EasyBill und bestimmt den Zahlungsstatus
+ * → prüft Betrag, Fälligkeit, bezahlte Summe, Typ & Referenzen (Reminder, Dunning)
+ */
+{
+  node: 'Code',
+  action: 'Analysiere Status der EasyBill-Rechnung (z. B. bezahlt, überfällig, storniert)'
+}
+
+/**
+ * Supabase: Aktualisiert den Status der Rechnung
+ * → schreibt z. B. "BEZAHLT", "ÜBERFÄLLIG", "MAHNUNG" etc. zurück in invoice_status
+ */
+{
+  node: 'Supabase1',
+  action: 'Updatet das Feld "invoice_status" mit dem neuen Statuswert'
+}
+
+// -----------------------------------------------------------------------------
+// Hinweise:
+// - Es wird geprüft, ob Betrag vollständig bezahlt ist oder überfällig
+// - Ergebnisstatus wird auch als Beschreibung gespeichert (status_description)
+
+
+
+  
+// ---------------------------------------------------------------------------------------
+
   "name": "Rechnung Bezahlt Status in Supabase Updaten",
   "nodes": [
     {
