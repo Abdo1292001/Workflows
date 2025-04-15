@@ -579,7 +579,7 @@ return execute();
 
 
 
-***
+
 \\ Kommentare und Erklärung zu jedem Node:
 // n8n Workflow: supabase - EasyBill - Rechnungserstellung (alle Kategorien)
 // -----------------------------------------------------------------------------
@@ -669,4 +669,3 @@ return execute();
 // -----------------------------------------------------------------------------
 
 
-***
