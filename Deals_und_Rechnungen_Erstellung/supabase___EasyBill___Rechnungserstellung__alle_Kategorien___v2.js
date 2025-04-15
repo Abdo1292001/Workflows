@@ -1,4 +1,98 @@
 {
+  
+// Kommentare und Erklärung zu jedem Node:
+// n8n Workflow: supabase - EasyBill - Rechnungserstellung (alle Kategorien)
+// -----------------------------------------------------------------------------
+// Automatisierte Rechnungserstellung über EasyBill mit Kategoriefiltern & Supabase-Datenbank
+
+/**
+ * Zeitlicher Auslöser: Alle 30 Minuten
+ * → startet den Prozess zyklisch
+ */
+{
+  node: 'Schedule Trigger',
+  action: 'Startet den Workflow alle 30 Minuten'
+}
+
+/**
+ * Datum vorbereiten für die Rechnungsfilterung
+ * → wandelt Zeitstempel in YYYY-MM-DD Format
+ */
+{
+  node: 'Date & Time',
+  action: 'Konvertiere Zeitstempel für Abfrage nach Rechnungen'
+}
+
+/**
+ * Supabase: Filtert alle Rechnungen mit Status "DB_erstellt" zum heutigen Tag
+ */
+{
+  node: 'get Rechnung',
+  action: 'Abfrage in "rechnungen"-Tabelle mit Statusfilter'
+}
+
+/**
+ * Supabase: Holt Kundendaten anhand der Hubspot-ID
+ */
+{
+  node: 'get Kunden',
+  action: 'Verknüpft Rechnung mit Kundenprofil aus "kunde"-Tabelle'
+}
+
+/**
+ * Supabase: Holt zugehörigen Deal inkl. Produkt-Zuordnung
+ */
+{
+  node: 'get Produkt from Deal',
+  action: 'Extrahiert Produkt-ID aus "deals" für spätere Zuordnung'
+}
+
+/**
+ * Supabase: Holt Produktinformationen anhand des Produktnamens
+ */
+{
+  node: 'get Produkt',
+  action: 'Lädt Produktdaten aus "produkte"-Tabelle'
+}
+
+/**
+ * Verknüpft Rechnungen + Kunden + Produktinformationen
+ * via SQL JOIN über Input1–3
+ */
+{
+  node: 'Merge',
+  action: 'SQL-Merge aus Rechnung, Kunde & Produkt via ID-Zuordnung'
+}
+
+/**
+ * Code-Node: Erstellt und finalisiert Rechnung in EasyBill via API
+ * Mandant = Kategorie 1 → API Key A
+ */
+{
+  node: 'Code',
+  action: 'Verarbeitet Rechnung für Kategorie 1'
+}
+
+/**
+ * Supabase: Aktualisiert Rechnungsstatus & IDs nach erfolgreicher Erstellung
+ */
+{
+  node: 'Supabase1',
+  action: 'Speichert EasyBill-ID, Status und Fälligkeitsdatum zurück'
+}
+
+// -----------------------------------------------------------------------------
+// Hinweise:
+// - Kategorie-Zweigfilterung über easybill_kategorie optional, hier entfällt sie
+// - Mandantensteuerung über separaten Workflow oder Parametrisierung möglich
+// - Fehlerhandling integriert (JSON Rückgabe mit success: false)
+
+
+  
+// ------------------------------------------------------------------------------
+
+
+  
   "name": "supabase - EasyBill - Rechnungserstellung (alle Kategorien) _v2",
   "nodes": [
     {
@@ -571,101 +665,3 @@ return execute();
     }
   ]
 }
-
-
-
-// -----------------------------------------------------------------------------------------------------
-
-
-
-
-
-\\ Kommentare und Erklärung zu jedem Node:
-// n8n Workflow: supabase - EasyBill - Rechnungserstellung (alle Kategorien)
-// -----------------------------------------------------------------------------
-// Automatisierte Rechnungserstellung über EasyBill mit Kategoriefiltern & Supabase-Datenbank
-
-/**
- * Zeitlicher Auslöser: Alle 30 Minuten
- * → startet den Prozess zyklisch
- */
-{
-  node: 'Schedule Trigger',
-  action: 'Startet den Workflow alle 30 Minuten'
-}
-
-/**
- * Datum vorbereiten für die Rechnungsfilterung
- * → wandelt Zeitstempel in YYYY-MM-DD Format
- */
-{
-  node: 'Date & Time',
-  action: 'Konvertiere Zeitstempel für Abfrage nach Rechnungen'
-}
-
-/**
- * Supabase: Filtert alle Rechnungen mit Status "DB_erstellt" zum heutigen Tag
- */
-{
-  node: 'get Rechnung',
-  action: 'Abfrage in "rechnungen"-Tabelle mit Statusfilter'
-}
-
-/**
- * Supabase: Holt Kundendaten anhand der Hubspot-ID
- */
-{
-  node: 'get Kunden',
-  action: 'Verknüpft Rechnung mit Kundenprofil aus "kunde"-Tabelle'
-}
-
-/**
- * Supabase: Holt zugehörigen Deal inkl. Produkt-Zuordnung
- */
-{
-  node: 'get Produkt from Deal',
-  action: 'Extrahiert Produkt-ID aus "deals" für spätere Zuordnung'
-}
-
-/**
- * Supabase: Holt Produktinformationen anhand des Produktnamens
- */
-{
-  node: 'get Produkt',
-  action: 'Lädt Produktdaten aus "produkte"-Tabelle'
-}
-
-/**
- * Verknüpft Rechnungen + Kunden + Produktinformationen
- * via SQL JOIN über Input1–3
- */
-{
-  node: 'Merge',
-  action: 'SQL-Merge aus Rechnung, Kunde & Produkt via ID-Zuordnung'
-}
-
-/**
- * Code-Node: Erstellt und finalisiert Rechnung in EasyBill via API
- * Mandant = Kategorie 1 → API Key A
- */
-{
-  node: 'Code',
-  action: 'Verarbeitet Rechnung für Kategorie 1'
-}
-
-/**
- * Supabase: Aktualisiert Rechnungsstatus & IDs nach erfolgreicher Erstellung
- */
-{
-  node: 'Supabase1',
-  action: 'Speichert EasyBill-ID, Status und Fälligkeitsdatum zurück'
-}
-
-// -----------------------------------------------------------------------------
-// Hinweise:
-// - Kategorie-Zweigfilterung über easybill_kategorie optional, hier entfällt sie
-// - Mandantensteuerung über separaten Workflow oder Parametrisierung möglich
-// - Fehlerhandling integriert (JSON Rückgabe mit success: false)
-// -----------------------------------------------------------------------------
-
-
